@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>랜덤 그래프 DFS 오토바이 이동 데모</title>
+<style>
+  body {
+    margin: 0;
+    background: #f0f0f0;
+    font-family: sans-serif;
+    text-align: center;
+  }
+  #container {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    margin-top: 20px;
+  }
+  #leftPanel {
+    margin-right: 20px;
+  }
+  canvas {
+    background: white;
+    display: block;
+    margin: 20px auto;
+    border: 1px solid #ccc;
+  }
+  #controls {
+    margin: 20px;
+  }
+  button {
+    padding: 8px 16px;
+    margin: 5px;
+  }
+  #status {
+    margin-top: 10px;
+    font-weight: bold;
+  }
+  #rightPanel img {
+    max-width: 300px;
+    border: 1px solid #ccc;
+    background: #fff;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<h1>DFS 탐색 시뮬레이션</h1>
+<h2>거기 짜장 하나 배달 괜찮겠습니까?</h2>
+<div id="container">
+  <div id="leftPanel">
+    <div id="controls">
+      <button id="generate">주문 받기</button>
+      <button id="start-dfs">배달 시작</button>
+      <div id="status"></div>
+    </div>
+    <canvas id="graphCanvas" width="800" height="600"></canvas>
+  </div>
+  <div id="rightPanel">
+    <!-- 여기에 사이드 이미지를 넣습니다. -->
+    <img src="side_image.png" alt="사이드 이미지" />
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById('graphCanvas');
+  const ctx = canvas.getContext('2d');
+
+  const statusDiv = document.getElementById('status');
+
+  let nodes = [];
+  let edges = [];
+  let visited = [];
+  let dfsOrder = [];
+  let currentIndex = 0;
+
+  let bikePosition = { x: 0, y: 0 };
+  let animationFrame;
+
+  // 노드/엣지 랜덤 생성 파라미터
+  const NODE_COUNT = 10;
+  const EDGE_COUNT = 15;
+
+  // 오토바이 이미지 로딩
+  const bikeImage = new Image();
+  bikeImage.src = 'bike.png';  // 사용할 이미지 경로
+  let imgWidth = 80; // 오토바이 이미지 너비
+  let imgHeight = 80; // 오토바이 이미지 높이
+
+  // 노드 생성 함수
+  function generateRandomGraph() {
+    nodes = [];
+    edges = [];
+    visited = [];
+    dfsOrder = [];
+    currentIndex = 0;
+
+    // 노드 랜덤 배치
+    for (let i = 0; i < NODE_COUNT; i++) {
+      nodes.push({
+        id: i,
+        x: Math.random() * (canvas.width - 100) + 50,
+        y: Math.random() * (canvas.height - 100) + 50
+      });
+    }
+
+    // 중복없는 랜덤 엣지 생성
+    let edgeSet = new Set();
+    while (edgeSet.size < EDGE_COUNT) {
+      let a = Math.floor(Math.random() * NODE_COUNT);
+      let b = Math.floor(Math.random() * NODE_COUNT);
+      if (a !== b) {
+        let edgeKey = a < b ? `${a}-${b}` : `${b}-${a}`;
+        if (!edgeSet.has(edgeKey)) {
+          edgeSet.add(edgeKey);
+          edges.push({ from: a, to: b });
+        }
+      }
+    }
+
+    drawGraph();
+    statusDiv.textContent = "그래프가 생성되었습니다.";
+  }
+
+  // 그래프 그리기
+  function drawGraph() {
+    ctx.clearRect(0,0,canvas.width, canvas.height);
+
+    // 엣지 그리기
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 2;
+    for (let e of edges) {
+      let fromNode = nodes[e.from];
+      let toNode = nodes[e.to];
+      ctx.beginPath();
+      ctx.moveTo(fromNode.x, fromNode.y);
+      ctx.lineTo(toNode.x, toNode.y);
+      ctx.stroke();
+    }
+
+    // 노드 그리기
+    for (let node of nodes) {
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 15, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = 'white';
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(node.id, node.x, node.y);
+    }
+  }
+
+  // DFS 실행 함수
+  function dfs(start = 0) {
+    visited = new Array(NODE_COUNT).fill(false);
+    dfsOrder = [];
+    function dfsVisit(u) {
+      visited[u] = true;
+      dfsOrder.push(u);
+      let connectedNodes = edges
+        .filter(e => e.from === u || e.to === u)
+        .map(e => e.from === u ? e.to : e.from);
+      for (let v of connectedNodes) {
+        if (!visited[v]) {
+          dfsVisit(v);
+        }
+      }
+    }
+    dfsVisit(start);
+    statusDiv.textContent = "배달 순서: " + dfsOrder.join(" -> ");
+  }
+
+  // 오토바이 이동 애니메이션
+  function animateBike() {
+    if (currentIndex >= dfsOrder.length - 1) {
+      cancelAnimationFrame(animationFrame);
+      statusDiv.textContent += " | 배달 다했다 이기야!";
+      return;
+    }
+
+    let currentNode = nodes[dfsOrder[currentIndex]];
+    let nextNode = nodes[dfsOrder[currentIndex + 1]];
+
+    let dx = nextNode.x - bikePosition.x;
+    let dy = nextNode.y - bikePosition.y;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 1) {
+      // 다음 노드 도착
+      currentIndex++;
+      if (currentIndex < dfsOrder.length) {
+        bikePosition.x = nodes[dfsOrder[currentIndex]].x;
+        bikePosition.y = nodes[dfsOrder[currentIndex]].y;
+      }
+    } else {
+      bikePosition.x += dx * 0.05; 
+      bikePosition.y += dy * 0.05;
+    }
+
+    drawGraph();
+    // 오토바이 이미지 그리기 (이미지 로드 완료 여부 확인)
+    if (bikeImage.complete) {
+      ctx.drawImage(bikeImage, bikePosition.x - imgWidth / 2, bikePosition.y - imgHeight / 2, imgWidth, imgHeight);
+    }
+
+    animationFrame = requestAnimationFrame(animateBike);
+  }
+
+  // 버튼 이벤트
+  document.getElementById('generate').addEventListener('click', ()=>{
+    generateRandomGraph();
+  });
+
+  document.getElementById('start-dfs').addEventListener('click', ()=>{
+    if (nodes.length === 0) {
+      statusDiv.textContent = "그래프를 먼저 생성해주세요.";
+      return;
+    }
+    dfs(0);
+    // 오토바이 시작 위치 초기화
+    bikePosition.x = nodes[dfsOrder[0]].x;
+    bikePosition.y = nodes[dfsOrder[0]].y;
+    currentIndex = 0;
+    cancelAnimationFrame(animationFrame);
+    animateBike();
+  });
+
+  // 초기 상태: 그래프 미생성
+  statusDiv.textContent = "그래프를 생성해주세요.";
+</script>
+
+</body>
+</html>
